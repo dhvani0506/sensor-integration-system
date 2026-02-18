@@ -41,9 +41,17 @@ app.post('/api/auth/register', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
+  // ✅ Password policy check BEFORE hashing/saving
+  if (!passwordMeetsPolicy(password)) {
+    return res.status(400).json({
+      error:
+        'Password must be 12–64 characters and include uppercase, lowercase, number, and special character (no spaces).'
+    });
+  }
+
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    
+
     db.run(
       'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
       [username, email, hashedPassword],
@@ -54,13 +62,13 @@ app.post('/api/auth/register', async (req, res) => {
           }
           return res.status(500).json({ error: 'Error creating user' });
         }
-        
+
         const token = jwt.sign(
           { id: this.lastID, username },
           process.env.JWT_SECRET,
           { expiresIn: '24h' }
         );
-        
+
         res.status(201).json({
           message: 'User created successfully',
           token,
@@ -92,19 +100,19 @@ app.post('/api/auth/login', (req, res) => {
 
     // Check if account is locked
     if (user.is_locked === 1) {
-      return res.status(403).json({ 
-        error: 'Account locked due to too many failed attempts.' 
+      return res.status(403).json({
+        error: 'Account locked due to too many failed attempts.'
       });
     }
 
     try {
       const validPassword = await bcrypt.compare(password, user.password);
 
-      //If password is wrong
+      // If password is wrong
       if (!validPassword) {
         const newAttempts = (user.failed_attempts || 0) + 1;
-      
-      //Lock account after 3 failed attempts
+
+        // Lock account after 3 failed attempts
         if (newAttempts >= 3) {
           db.run(
             'UPDATE users SET failed_attempts = ?, is_locked = 1 WHERE id = ?',
@@ -113,11 +121,11 @@ app.post('/api/auth/login', (req, res) => {
               if (updateErr) {
                 console.error('Error locking account:', updateErr);
               }
-          }
-        );
+            }
+          );
 
-          return res.status(403).json({ 
-            error: 'Account locked after 3 failed attempts.' 
+          return res.status(403).json({
+            error: 'Account locked after 3 failed attempts.'
           });
         } else {
           db.run(
@@ -130,13 +138,13 @@ app.post('/api/auth/login', (req, res) => {
             }
           );
 
-          return res.status(401).json({ 
-            error: `Invalid credentials. ${3 - newAttempts} attempts left.` 
+          return res.status(401).json({
+            error: `Invalid credentials. ${3 - newAttempts} attempts left.`
           });
         }
       }
 
-      //If password is correct
+      // If password is correct
       db.run(
         'UPDATE users SET failed_attempts = 0 WHERE id = ?',
         [user.id],
@@ -175,6 +183,7 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
     res.json(user);
   });
 });
+
 
 // ========== Device Routes ==========
 
